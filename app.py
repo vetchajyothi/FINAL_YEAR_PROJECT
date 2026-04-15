@@ -89,6 +89,7 @@ def detect_clots_and_lesion(image):
         mask = model_unet(img).squeeze().cpu().numpy()
 
     num_clots, areas, contours, _ = extract_clots_from_mask(mask)
+
     total_area = sum(areas)
 
     img_array = np.array(image)
