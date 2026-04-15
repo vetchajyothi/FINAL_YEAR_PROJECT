@@ -8,6 +8,7 @@ import io
 import torch
 from torchvision import transforms
 import cv2
+import gdown
 from classification import StrokeClassifier, StrokeTypeClassifier, predict_class
 from segmentation_detection import UNet, extract_clots_from_mask
 
@@ -68,39 +69,34 @@ st.markdown("""
 # 1. Model Caching (Loads weights once in Streamlit)
 @st.cache_resource
 def load_models():
-    """
-    Initializes models and attempts to load trained weights.
-    If weights aren't found locally, it falls back to random/ImageNet weights 
-    (which will not give medically accurate predictions).
-    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # -------------------------------
+    # DOWNLOAD MODEL FILES FROM DRIVE
+    # -------------------------------
+    def download_file(file_id, output):
+        if not os.path.exists(output):
+            url = f"https://drive.google.com/uc?id={file_id}"
+            gdown.download(url, output, quiet=False)
+
+    download_file("14IgpgBioDyohj8VFbELbTAuRxOsRx0rf", "stroke_classifier_weights.pth")
+    download_file("1hGEHj_pcsAzLmUWPUQg0LqpRThnUjB61", "stroke_type_weights.pth")
+    download_file("1yGySxyxfLMnjWtzO-TwAV9z9gldmZMrc", "unet_weights.pth")
+
+    # -------------------------------
+    # LOAD MODELS (UNCHANGED)
+    # -------------------------------
     
-    # Classification: Stroke (Normal vs Stroke)
     model_stroke = StrokeClassifier(num_classes=2).to(device)
-    if os.path.exists("stroke_classifier_weights.pth"):
-        model_stroke.load_state_dict(torch.load("stroke_classifier_weights.pth", map_location=device))
-        print("Loaded trained Stroke Classifier weights.")
-    else:
-         st.sidebar.warning("Training weights `stroke_classifier_weights.pth` not found. Model predictions are random.")
+    model_stroke.load_state_dict(torch.load("stroke_classifier_weights.pth", map_location=device))
     model_stroke.eval()
     
-    # Classification: Stroke Type (Ischemic vs Hemorrhagic)
     model_type = StrokeTypeClassifier(num_classes=2).to(device)
-    if os.path.exists("stroke_type_weights.pth"):
-        model_type.load_state_dict(torch.load("stroke_type_weights.pth", map_location=device))
-        print("Loaded trained Stroke Type Classifier weights.")
-    else:
-        st.sidebar.warning("Training weights `stroke_type_weights.pth` not found.")
+    model_type.load_state_dict(torch.load("stroke_type_weights.pth", map_location=device))
     model_type.eval()
     
-    
-    # Segmentation: Clot/Lesion Location (U-Net)
     model_unet = UNet(n_channels=3, n_classes=1).to(device)
-    if os.path.exists("unet_weights.pth"):
-        model_unet.load_state_dict(torch.load("unet_weights.pth", map_location=device))
-        print("Loaded trained U-Net Segmentation weights.")
-    else:
-         st.sidebar.warning("Training weights `unet_weights.pth` not found. Segmentation is random.")
+    model_unet.load_state_dict(torch.load("unet_weights.pth", map_location=device))
     model_unet.eval()
     
     return model_stroke, model_type, model_unet, device
