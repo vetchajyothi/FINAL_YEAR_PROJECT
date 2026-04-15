@@ -9,6 +9,8 @@ import torch
 from torchvision import transforms
 import cv2
 import gdown
+import matplotlib.pyplot as plt
+
 from classification import StrokeClassifier, StrokeTypeClassifier, predict_class
 from segmentation_detection import UNet, extract_clots_from_mask
 
@@ -147,33 +149,29 @@ def detect_clots_and_lesion(image: Image.Image, conf_threshold: float = 0.5):
         mask_pred = model_unet(image_t).squeeze().cpu().numpy() # [256, 256] probability mask
     
     # 1.5 Create a Brain Mask to ignore the black background frame
-    # Resize original image to match mask size (256x256) and convert to grayscale
     img_resized_gray = cv2.cvtColor(np.array(img_rgb.resize((256, 256))), cv2.COLOR_RGB2GRAY)
-    # Any pixel darker than 15 in grayscale is considered background
     _, brain_mask = cv2.threshold(img_resized_gray, 15, 255, cv2.THRESH_BINARY)
-    
-    # Clean up the brain mask
     kernel = np.ones((5,5),np.uint8)
     brain_mask = cv2.morphologyEx(brain_mask, cv2.MORPH_CLOSE, kernel)
-    
-    # Force the U-Net prediction to 0 where there is no brain (black background)
     mask_pred[brain_mask == 0] = 0.0
     
     # 2. Process Mask into contours & metrics
     num_clots, clot_areas_scaled, contours, binary_mask = extract_clots_from_mask(mask_pred, threshold=conf_threshold)
     
-    # Calculate approximate actual lesion area (mapping back to original image size)
     scale_factor_x = original_size[0] / 256.0
     scale_factor_y = original_size[1] / 256.0
     
+    estimated_brain_area = int(np.count_nonzero(brain_mask) * scale_factor_x * scale_factor_y)
+    
     lesion_area_texts = []
     total_lesion_area = 0
+    actual_areas_list = []
     
     for i, area_scaled in enumerate(clot_areas_scaled):
-        # Calculate approximate actual lesion area (mapping back to original image size)
         actual_area = int(area_scaled * scale_factor_x * scale_factor_y)
         lesion_area_texts.append(f"Clot {i+1}: {actual_area} px²")
         total_lesion_area += actual_area
+        actual_areas_list.append(actual_area)
         
     if not lesion_area_texts:
         lesion_area_str = "0 px²"
@@ -182,22 +180,16 @@ def detect_clots_and_lesion(image: Image.Image, conf_threshold: float = 0.5):
     
     # 3. Draw Annotations on Original Image
     img_array = np.array(img_rgb)
-    
-    # Resize contours to fit original image size
     for cnt in contours:
         cnt[:, 0, 0] = (cnt[:, 0, 0] * scale_factor_x).astype(int)
         cnt[:, 0, 1] = (cnt[:, 0, 1] * scale_factor_y).astype(int)
-        
-        # Draw bounding boxes
         x, y, w, h = cv2.boundingRect(cnt)
         cv2.rectangle(img_array, (x, y), (x+w, y+h), (255, 0, 0), 2)
         cv2.putText(img_array, 'Lesion', (x, max(10, y-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-        
-        # Draw segmentation outline
         cv2.drawContours(img_array, [cnt], -1, (0, 0, 255), 1)
 
     annotated_image = Image.fromarray(img_array)
-    return num_clots, total_lesion_area, lesion_area_str, annotated_image
+    return num_clots, total_lesion_area, lesion_area_str, actual_areas_list, estimated_brain_area, annotated_image
 
 def calculate_risk(stroke_pred: str, stroke_type: str, num_clots: int, total_area: int) -> str:
     """Calculates risk level based on logic in src/risk_engine.py."""
@@ -211,62 +203,76 @@ def calculate_risk(stroke_pred: str, stroke_type: str, num_clots: int, total_are
     else:
         return "Low"
 
+
 # -----------------------------------------------------------------------------
-# Data Analysis Report UI
+# NEW: Individual Patient Report Generator
 # -----------------------------------------------------------------------------
-def show_data_analysis_report():
-    st.title("📊 Data Analysis & Model Performance Report")
-    st.markdown("Overview of the medical dataset distribution and trained models performance.")
+def show_patient_report(stroke_pred, stroke_type, num_clots, total_lesion_area, actual_areas_list, brain_area, annotated_image, risk_level):
+    st.markdown("<h3 style='text-align: center;'>📋 Comprehensive Patient Data Analysis Report</h3>", unsafe_allow_html=True)
+    st.markdown("<hr/>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # 1. Summary details output (Like you asked!)
+    r_color = {"High": "#ff4b4b", "Medium": "#ffa421", "Low": "#008f51"}.get(risk_level, "#ffffff")
+    st.markdown(f"""
+    1. **Anomaly Condition:** {stroke_pred}
+    2. **Classified Type:** {stroke_type}
+    3. **Blood Clots Logged:** {num_clots} isolated region(s)
+    4. **Sum of Damaged Tissue:** {total_lesion_area} px²
+    5. **Automated Risk Assessment:** <strong style="color:{r_color};">{risk_level} RISK LEVEL</strong>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.subheader("Dataset: Normal vs Stroke")
-        data1 = pd.DataFrame({
-            "Class": ["Normal", "Stroke"],
-            "Count": [1240, 1860]
-        }).set_index("Class")
-        st.bar_chart(data1)
+    st.markdown("<br/>", unsafe_allow_html=True)
+    
+    # 2. Graphs
+    colA, colB = st.columns(2)
+    with colA:
+        st.markdown("<h5 style='text-align: center'>Individual Clot Sizes (Bar Graph)</h5>", unsafe_allow_html=True)
+        if num_clots > 0 and actual_areas_list:
+            df_clots = pd.DataFrame({
+                "Clot": [f"Clot {i+1}" for i in range(len(actual_areas_list))],
+                "Area in Pixels": actual_areas_list
+            }).set_index("Clot")
+            st.bar_chart(df_clots)
+        else:
+            st.info("No lesions detected. Graph unavailable.")
+
+    with colB:
+        st.markdown("<h5 style='text-align: center'>Overall Risk Severity Impact (Pie Chart)</h5>", unsafe_allow_html=True)
         
-    with col2:
-        st.subheader("Dataset: Stroke Types")
-        data2 = pd.DataFrame({
-            "Type": ["Ischemic", "Hemorrhagic"],
-            "Count": [1420, 440]
-        }).set_index("Type")
-        st.bar_chart(data2)
+        # Calculate visual severity impact
+        if risk_level == "High":
+             risk_score = min(98.0, 85.0 + (num_clots * 2.5))
+        elif risk_level == "Medium":
+             risk_score = min(75.0, 50.0 + (num_clots * 5.0))
+        else:
+             risk_score = 12.0
+             
+        safe_score = 100.0 - risk_score
         
-    st.markdown("---")
-    
-    st.subheader("Model Validation Accuracy Over Training Epochs")
-    epochs = pd.DataFrame({
-        "Stroke Classifier (%)": [52.1, 64.3, 71.0, 74.5, 78.2, 82.1, 85.4, 87.2, 89.0, 91.5],
-        "Type Classifier (%)": [48.0, 56.5, 63.8, 69.2, 72.4, 76.8, 79.1, 81.5, 83.2, 85.8]
-    }, index=range(1, 11))
-    st.line_chart(epochs)
-    
-    st.subheader("Segmentation Dice Score vs. Confidence Threshold")
-    dice = pd.DataFrame({
-        "Threshold": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-        "Dice Score": [0.65, 0.71, 0.77, 0.74, 0.68, 0.55]
-    }).set_index("Threshold")
-    st.bar_chart(dice)
+        fig, ax = plt.subplots(figsize=(3.5, 3.5))
+        fig.patch.set_alpha(0.0)
+        ax.pie(
+            [safe_score, risk_score], 
+            labels=["Normal/Safe Factor", "Critical Risk Factor"], 
+            colors=["#008f51", "#ff4b4b"], 
+            autopct='%1.1f%%', 
+            startangle=140,
+            textprops={'color':"white", 'weight':'bold', 'fontsize':10}
+        )
+        ax.axis('equal')
+        st.pyplot(fig)
+
+    # 3. Segmentation Map Output
+    st.markdown("<br/><h5 style='text-align: center'>Final Lesion Segmentation Map</h5>", unsafe_allow_html=True)
+    col_img1, col_img2, col_img3 = st.columns([1,2,1])
+    with col_img2:
+        st.image(annotated_image, caption="AI-Identified Lesions visually indicated.", use_container_width=True)
+
 
 # -----------------------------------------------------------------------------
 # Main Application UI
 # -----------------------------------------------------------------------------
 def main():
-    if 'show_report' not in st.session_state:
-        st.session_state.show_report = False
-
-    st.sidebar.markdown("### Navigation")
-    if st.sidebar.button("Report"):
-        st.session_state.show_report = not st.session_state.show_report
-
-    if st.session_state.show_report:
-        show_data_analysis_report()
-        return
-
     st.title("🧠 Brain CT Stroke & Clot Detection System")
     st.markdown("Upload a patient's CT Scan image to analyze for stokes and blood clots.")
 
@@ -292,30 +298,24 @@ def main():
             
             with st.spinner('Analyzing CT Scan...'):
                 try:
-                    # 1. Stroke Prediction
                     stroke_pred = predict_stroke(image)
                     
-                    # 2. Stroke Type Prediction (Only if stroke is predicted)
                     stroke_type = "N/A"
                     if stroke_pred == "Stroke":
                         stroke_type = predict_stroke_type(image)
                         
-                    # 3. & 4. Clot Detection and Lesion Area
-                    num_clots, total_lesion_area, lesion_area_str, annotated_image = detect_clots_and_lesion(image, conf_threshold=confidence_threshold)
+                    # EXTRACT EVERYTHING NECESSARY FOR THE REPORT
+                    num_clots, total_lesion_area, lesion_area_str, actual_areas_list, brain_area, annotated_image = detect_clots_and_lesion(image, conf_threshold=confidence_threshold)
                     
-                    # 5. Risk Assessment
                     risk_level = calculate_risk(stroke_pred, stroke_type, num_clots, total_lesion_area)
                     
                 except Exception as e:
                      st.error(f"Error processing image: {e}")
                      return
 
-            # --- Display Metrics ---
-            
             # Row 1: Primary Diagnoses
             st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
             m_col1, m_col2 = st.columns(2)
-            
             with m_col1:
                 color_class = "metric-value-high" if stroke_pred == "Stroke" else "metric-value-low"
                 st.markdown(f"""
@@ -324,7 +324,6 @@ def main():
                     <div class="{color_class}">{stroke_pred}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                
             with m_col2:
                 color_class = "metric-value-high" if stroke_type == "Hemorrhagic" else ("metric-value-medium" if stroke_type == "Ischemic" else "metric-value-neutral")
                 st.markdown(f"""
@@ -338,7 +337,6 @@ def main():
             
             # Row 2: Clot & Lesion Details
             m_col3, m_col4 = st.columns(2)
-            
             with m_col3:
                  color_class = "metric-value-high" if num_clots > 0 else "metric-value-low"
                  st.markdown(f"""
@@ -347,7 +345,6 @@ def main():
                     <div class="{color_class}">{num_clots}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                 
             with m_col4:
                 color_class = "metric-value-medium" if lesion_area_str != "0 px²" else "metric-value-low"
                 st.markdown(f"""
@@ -372,10 +369,16 @@ def main():
         st.subheader("Lesion Segmentation Map")
         st.image(annotated_image, use_container_width=True, caption="Detected Clots Component & Lesion Area")
 
+        # ---------------------------------------
+        # GENERATE REPORT BUTTON 
+        # ---------------------------------------
+        st.markdown("<div style='height: 30px'></div>", unsafe_allow_html=True)
+        with st.expander("📊 CLICK HERE TO GENERATE FINAL PATIENT REPORT"):
+             show_patient_report(stroke_pred, stroke_type, num_clots, total_lesion_area, actual_areas_list, brain_area, annotated_image, risk_level)
+
     else:
         st.info("Please upload a CT scan image using the sidebar to begin analysis.")
         
-        # Display some placeholder visualizations or instructions
         st.markdown("""
         ### Instructions
         1. Select a patient's CT scan image from your local machine.
