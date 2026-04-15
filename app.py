@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -24,7 +23,7 @@ def download_file(url, output):
         gdown.download(url, output, quiet=False)
 
 # -------------------------------
-# LOAD MODELS (FIXED)
+# LOAD MODELS
 # -------------------------------
 @st.cache_resource
 def load_models():
@@ -90,7 +89,6 @@ def detect_clots_and_lesion(image):
         mask = model_unet(img).squeeze().cpu().numpy()
 
     num_clots, areas, contours, _ = extract_clots_from_mask(mask)
-
     total_area = sum(areas)
 
     img_array = np.array(image)
@@ -134,4 +132,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
