@@ -23,7 +23,7 @@ def download_file(url, output):
         gdown.download(url, output, quiet=False)
 
 # -------------------------------
-# LOAD MODELS
+# LOAD MODELS (FIXED)
 # -------------------------------
 @st.cache_resource
 def load_models():
