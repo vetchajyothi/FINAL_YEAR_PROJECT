@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from PIL import Image
+import time
 import os
+import io
 import torch
 import cv2
 from torchvision import transforms
@@ -12,7 +14,6 @@ import gdown
 from classification import StrokeClassifier, StrokeTypeClassifier, predict_class
 from segmentation_detection import UNet, extract_clots_from_mask
 
-# Page config
 st.set_page_config(page_title="Brain CT Stroke & Clot Detection", page_icon="🧠", layout="wide")
 
 # -------------------------------
@@ -39,17 +40,15 @@ def load_models():
     download_file("https://drive.google.com/uc?id=1yGySxyxfLMnjWtzO-TwAV9z9gldmZMrc",
                   "unet_weights.pth")
 
-    # Load Stroke Classifier
+    # Load models
     model_stroke = StrokeClassifier(num_classes=2).to(device)
     model_stroke.load_state_dict(torch.load("stroke_classifier_weights.pth", map_location=device))
     model_stroke.eval()
 
-    # Load Stroke Type Classifier
     model_type = StrokeTypeClassifier(num_classes=2).to(device)
     model_type.load_state_dict(torch.load("stroke_type_weights.pth", map_location=device))
     model_type.eval()
 
-    # Load U-Net
     model_unet = UNet(n_channels=3, n_classes=1).to(device)
     model_unet.load_state_dict(torch.load("unet_weights.pth", map_location=device))
     model_unet.eval()
@@ -73,7 +72,7 @@ segmentation_transforms = transforms.Compose([
 ])
 
 # -------------------------------
-# PREDICTION FUNCTIONS
+# FUNCTIONS
 # -------------------------------
 def predict_stroke(image):
     image_t = classification_transforms(image).unsqueeze(0).to(device)
@@ -89,7 +88,6 @@ def detect_clots_and_lesion(image):
         mask = model_unet(img).squeeze().cpu().numpy()
 
     num_clots, areas, contours, _ = extract_clots_from_mask(mask)
-
     total_area = sum(areas)
 
     img_array = np.array(image)
@@ -99,37 +97,57 @@ def detect_clots_and_lesion(image):
 
     return num_clots, total_area, Image.fromarray(img_array)
 
+def calculate_risk(stroke, stroke_type, num_clots):
+    if stroke == "Normal":
+        return "Low"
+    if stroke_type == "Hemorrhagic" or num_clots > 1:
+        return "High"
+    return "Medium"
+
 # -------------------------------
 # UI
 # -------------------------------
 def main():
-    st.title("🧠 Brain CT Stroke Detection")
+    st.title("🧠 Brain CT Stroke & Clot Detection System")
 
-    file = st.file_uploader("Upload CT Scan", type=["jpg", "png", "jpeg"])
+    st.sidebar.header("Controls")
+    file = st.sidebar.file_uploader("Upload CT Scan", type=["jpg", "png", "jpeg"])
+
+    confidence = st.sidebar.slider("Detection Confidence", 0.1, 1.0, 0.5)
 
     if file:
         image = Image.open(file).convert("RGB")
 
-        st.image(image, caption="Uploaded Image")
+        col1, col2 = st.columns([1, 1.2])
 
-        if st.button("Analyze"):
-            stroke = predict_stroke(image)
+        with col1:
+            st.subheader("Original CT Scan")
+            st.image(image, use_container_width=True)
 
-            if stroke == "Stroke":
-                stroke_type = predict_stroke_type(image)
-            else:
-                stroke_type = "N/A"
+        with col2:
+            st.subheader("Analysis Results")
 
-            num_clots, area, annotated = detect_clots_and_lesion(image)
+            with st.spinner("Analyzing..."):
+                stroke = predict_stroke(image)
 
-            st.subheader("Results")
-            st.write("Stroke:", stroke)
-            st.write("Type:", stroke_type)
-            st.write("Clots:", num_clots)
-            st.write("Lesion Area:", area)
+                if stroke == "Stroke":
+                    stroke_type = predict_stroke_type(image)
+                else:
+                    stroke_type = "N/A"
 
-            st.image(annotated, caption="Detected Areas")
+                num_clots, area, annotated = detect_clots_and_lesion(image)
+                risk = calculate_risk(stroke, stroke_type, num_clots)
 
+            st.metric("Stroke Prediction", stroke)
+            st.metric("Stroke Type", stroke_type)
+            st.metric("Clots Detected", num_clots)
+            st.metric("Lesion Area", f"{area} px²")
+            st.metric("Risk Level", risk)
+
+        st.image(annotated, caption="Detected Lesions")
+
+    else:
+        st.info("Please upload a CT scan image to begin analysis.")
 
 if __name__ == "__main__":
     main()
