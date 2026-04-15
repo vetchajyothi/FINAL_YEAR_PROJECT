@@ -8,8 +8,8 @@ import io
 import torch
 from torchvision import transforms
 import cv2
-from src.models.classification import StrokeClassifier, StrokeTypeClassifier, predict_class
-from src.models.segmentation_detection import UNet, extract_clots_from_mask
+from classification import StrokeClassifier, StrokeTypeClassifier, predict_class
+from segmentation_detection import UNet, extract_clots_from_mask
 
 # Set page config for a wider layout and custom title
 st.set_page_config(page_title="Brain CT Stroke & Clot Detection", page_icon="🧠", layout="wide")
