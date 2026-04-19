@@ -133,7 +133,7 @@ def predict_stroke(image: Image.Image) -> str:
 def predict_stroke_type(image: Image.Image) -> str:
     """Predicts if the stroke is Ischemic or Hemorrhagic using ResNet."""
     image_t = classification_transforms(image.convert("RGB")).unsqueeze(0).to(device)
-    classes = get_classes_for_model("stroke_type_weights.pth", ["Hemorrhagic", "Ischemic"])
+    classes = get_classes_for_model("stroke_type_weights.pth", ["Ischemic", "Hemorrhagic"])
     return predict_class(model_type, image_t, classes)
 
 def detect_clots_and_lesion(image: Image.Image, conf_threshold: float = 0.5):
