@@ -67,7 +67,6 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 
 # 1. Model Caching (Loads weights once in Streamlit)
-# 1. Model Caching (Loads weights once in Streamlit)
 @st.cache_resource
 def load_models():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -277,7 +276,9 @@ def main():
     st.sidebar.header("Controls")
     uploaded_file = st.sidebar.file_uploader("Upload CT Scan (.jpg, .png, .dcm)", type=["jpg", "jpeg", "png"])
 
-    confidence_threshold = 0.5
+    # Model Settings placeholder
+    st.sidebar.subheader("Model Settings")
+    confidence_threshold = st.sidebar.slider("Detection Confidence", min_value=0.1, max_value=1.0, value=0.5, step=0.05)
 
     if uploaded_file is not None:
         # Load Image
