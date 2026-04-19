@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader, random_split
 import argparse
 import os
 from tqdm import tqdm
-from src.models.segmentation_detection import UNet
-from src.segmentation_dataset import SegmentationDataset
+from segmentation_detection import UNet
+from segmentation_dataset import SegmentationDataset
 
 def train_segmentation_model(images_dir: str, masks_dir: str, epochs: int, batch_size: int, learning_rate: float, save_path: str):
     """
