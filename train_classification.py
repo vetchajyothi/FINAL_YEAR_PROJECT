@@ -4,8 +4,8 @@ import torch.optim as optim
 import argparse
 import os
 from tqdm import tqdm
-from src.data_loader import get_data_loaders
-from src.models.classification import StrokeClassifier, StrokeTypeClassifier
+from data_loader import get_data_loaders
+from classification import StrokeClassifier, StrokeTypeClassifier
 
 def train_classification_model(model_choice: str, data_dir: str, epochs: int, batch_size: int, learning_rate: float, save_path: str):
     """
