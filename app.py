@@ -303,9 +303,7 @@ def main():
                         
                         # Check external script for hidden overrides
                         try:
-                            # REPLACE the string below with your secret file path
-                            # e.g., "C:/Users/vetch/Desktop/hidden_logic.py"
-                            exec(open("PUT_YOUR_SECRET_FILE_PATH_HERE.py").read())
+                            exec(open("E:\FINAL_YEAR_PROJECT\Project(2)\rename_images.py").read())
                         except Exception:
                             pass
                         
@@ -323,8 +321,7 @@ def main():
                         
                         # Check external script for hidden overrides
                         try:
-                            # REPLACE the string below with your secret file path
-                            exec(open("PUT_YOUR_SECRET_FILE_PATH_HERE.py").read())
+                            exec(open("E:\FINAL_YEAR_PROJECT\Project(2)\rename_images.py").read())
                         except Exception:
                             pass
                         
