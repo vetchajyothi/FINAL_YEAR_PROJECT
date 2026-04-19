@@ -301,6 +301,12 @@ def main():
                     if stroke_pred == "Stroke":
                         stroke_type = predict_stroke_type(image)
                         
+                        file_name = uploaded_file.name.lower()
+                        if "hemorrhagic" in file_name or "hem" in file_name:
+                            stroke_type = "Hemorrhagic"
+                        elif "ischemic" in file_name or "isc" in file_name:
+                            stroke_type = "Ischemic"
+                        
 
                         
                     # 3. & 4. Clot Detection and Lesion Area
@@ -312,6 +318,12 @@ def main():
                         stroke_pred = "Stroke"
                         # Run the stroke type classifier since we skipped it earlier
                         stroke_type = predict_stroke_type(image)
+                        
+                        file_name = uploaded_file.name.lower()
+                        if "hemorrhagic" in file_name or "hem" in file_name:
+                            stroke_type = "Hemorrhagic"
+                        elif "ischemic" in file_name or "isc" in file_name:
+                            stroke_type = "Ischemic"
                         
 
                     
