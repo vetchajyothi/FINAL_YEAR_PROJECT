@@ -8,6 +8,7 @@ import io
 import torch
 from torchvision import transforms
 import cv2
+import gdown
 from classification import StrokeClassifier, StrokeTypeClassifier, predict_class
 from segmentation_detection import UNet, extract_clots_from_mask
 
@@ -148,13 +149,21 @@ def detect_clots_and_lesion(image: Image.Image, conf_threshold: float = 0.5):
     # 1.5 Create a Brain Mask to ignore the black background frame
     # Resize original image to match mask size (256x256) and convert to grayscale
     img_resized_gray = cv2.cvtColor(np.array(img_rgb.resize((256, 256))), cv2.COLOR_RGB2GRAY)
-    # Any pixel darker than 15 in grayscale is considered background
-    _, brain_mask = cv2.threshold(img_resized_gray, 15, 255, cv2.THRESH_BINARY)
     
-    # Clean up the brain mask
-    kernel = np.ones((5,5),np.uint8)
-    brain_mask = cv2.morphologyEx(brain_mask, cv2.MORPH_CLOSE, kernel)
+    # Apply a slight blur to reduce noise
+    blurred_gray = cv2.GaussianBlur(img_resized_gray, (5, 5), 0)
     
+    # Threshold to binary
+    _, thresh = cv2.threshold(blurred_gray, 15, 255, cv2.THRESH_BINARY)
+    
+    # Find contours to keep only the largest blob (the brain)
+    contours_brain, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    brain_mask = np.zeros_like(img_resized_gray)
+    if contours_brain:
+        largest_contour_brain = max(contours_brain, key=cv2.contourArea)
+        # Fill the largest contour to create a solid brain mask
+        cv2.drawContours(brain_mask, [largest_contour_brain], -1, 255, thickness=cv2.FILLED)
+        
     # Force the U-Net prediction to 0 where there is no brain (black background)
     mask_pred[brain_mask == 0] = 0.0
     
@@ -255,17 +264,6 @@ def show_data_analysis_report():
 # Main Application UI
 # -----------------------------------------------------------------------------
 def main():
-    if 'show_report' not in st.session_state:
-        st.session_state.show_report = False
-
-    st.sidebar.markdown("### Navigation")
-    if st.sidebar.button("Report"):
-        st.session_state.show_report = not st.session_state.show_report
-
-    if st.session_state.show_report:
-        show_data_analysis_report()
-        return
-
     st.title("🧠 Brain CT Stroke & Clot Detection System")
     st.markdown("Upload a patient's CT Scan image to analyze for stokes and blood clots.")
 
