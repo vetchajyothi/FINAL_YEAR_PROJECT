@@ -306,16 +306,6 @@ def main():
                             stroke_type = "Hemorrhagic"
                         elif "ischemic" in file_name or "isc" in file_name:
                             stroke_type = "Ischemic"
-                        else:
-                            # Improved heuristic: crop the center of the image to ignore the bright skull
-                            img_gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-                            h, w = img_gray.shape
-                            crop_gray = img_gray[int(h*0.15):int(h*0.85), int(w*0.15):int(w*0.85)]
-                            _, thresh = cv2.threshold(crop_gray, 210, 255, cv2.THRESH_BINARY)
-                            if cv2.countNonZero(thresh) > 10:
-                                stroke_type = "Hemorrhagic"
-                            else:
-                                stroke_type = "Ischemic"
                         
                     # 3. & 4. Clot Detection and Lesion Area
                     num_clots, total_lesion_area, lesion_area_str, annotated_image = detect_clots_and_lesion(image, conf_threshold=confidence_threshold)
@@ -332,16 +322,6 @@ def main():
                             stroke_type = "Hemorrhagic"
                         elif "ischemic" in file_name or "isc" in file_name:
                             stroke_type = "Ischemic"
-                        else:
-                            # Improved heuristic: crop the center of the image to ignore the bright skull
-                            img_gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-                            h, w = img_gray.shape
-                            crop_gray = img_gray[int(h*0.15):int(h*0.85), int(w*0.15):int(w*0.85)]
-                            _, thresh = cv2.threshold(crop_gray, 210, 255, cv2.THRESH_BINARY)
-                            if cv2.countNonZero(thresh) > 10:
-                                stroke_type = "Hemorrhagic"
-                            else:
-                                stroke_type = "Ischemic"
                     
                     # 5. Risk Assessment
                     risk_level = calculate_risk(stroke_pred, stroke_type, num_clots, total_lesion_area)
