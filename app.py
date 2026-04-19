@@ -67,6 +67,7 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 
 # 1. Model Caching (Loads weights once in Streamlit)
+# 1. Model Caching (Loads weights once in Streamlit)
 @st.cache_resource
 def load_models():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -301,20 +302,6 @@ def main():
                     if stroke_pred == "Stroke":
                         stroke_type = predict_stroke_type(image)
                         
-                        file_name = uploaded_file.name.lower()
-                        if "hemorrhagic" in file_name or "hem" in file_name:
-                            stroke_type = "Hemorrhagic"
-                        elif "ischemic" in file_name or "isc" in file_name:
-                            stroke_type = "Ischemic"
-                        else:
-                            # Fallback heuristic: Hemorrhagic strokes appear as bright white spots on CT
-                            img_gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-                            _, thresh = cv2.threshold(img_gray, 210, 255, cv2.THRESH_BINARY)
-                            if cv2.countNonZero(thresh) > 50:
-                                stroke_type = "Hemorrhagic"
-                            else:
-                                stroke_type = "Ischemic"
-                        
                     # 3. & 4. Clot Detection and Lesion Area
                     num_clots, total_lesion_area, lesion_area_str, annotated_image = detect_clots_and_lesion(image, conf_threshold=confidence_threshold)
                     
@@ -324,18 +311,6 @@ def main():
                         stroke_pred = "Stroke"
                         # Run the stroke type classifier since we skipped it earlier
                         stroke_type = predict_stroke_type(image)
-                        file_name = uploaded_file.name.lower()
-                        if "hemorrhagic" in file_name or "hem" in file_name:
-                            stroke_type = "Hemorrhagic"
-                        elif "ischemic" in file_name or "isc" in file_name:
-                            stroke_type = "Ischemic"
-                        else:
-                            img_gray = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
-                            _, thresh = cv2.threshold(img_gray, 210, 255, cv2.THRESH_BINARY)
-                            if cv2.countNonZero(thresh) > 50:
-                                stroke_type = "Hemorrhagic"
-                            else:
-                                stroke_type = "Ischemic"
                     
                     # 5. Risk Assessment
                     risk_level = calculate_risk(stroke_pred, stroke_type, num_clots, total_lesion_area)
