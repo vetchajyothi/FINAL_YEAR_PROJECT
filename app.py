@@ -67,6 +67,7 @@ st.markdown("""
 # -----------------------------------------------------------------------------
 
 # 1. Model Caching (Loads weights once in Streamlit)
+# 1. Model Caching (Loads weights once in Streamlit)
 @st.cache_resource
 def load_models():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -208,16 +209,22 @@ def detect_clots_and_lesion(image: Image.Image, conf_threshold: float = 0.5):
     return num_clots, total_lesion_area, lesion_area_str, annotated_image
 
 def calculate_risk(stroke_pred: str, stroke_type: str, num_clots: int, total_area: int) -> str:
-    """Calculates risk level based on logic in src/risk_engine.py."""
-    if stroke_pred == "Normal":
-        return "Low"
-    
-    if stroke_type == "Hemorrhagic" or num_clots > 1 or total_area > 2000:
-         return "High"
-    elif stroke_type == "Ischemic" and num_clots > 0:
+    """Calculates risk level based on the number of clots and baseline parameters."""
+    # User requested clot-based risk rules:
+    if num_clots > 3:
+        return "High / Very Serious"
+    elif num_clots >= 2 and num_clots <= 3:
+        return "Moderate to High"
+    elif num_clots == 1:
+        return "Low to Moderate"
+        
+    # Fallback if 0 clots are detected
+    if stroke_type == "Hemorrhagic" or total_area > 2000:
+        return "High"
+    elif stroke_type == "Ischemic":
         return "Medium"
-    else:
-        return "Low"
+        
+    return "Low"
 
 # -----------------------------------------------------------------------------
 # Data Analysis Report UI
@@ -270,9 +277,7 @@ def main():
     st.sidebar.header("Controls")
     uploaded_file = st.sidebar.file_uploader("Upload CT Scan (.jpg, .png, .dcm)", type=["jpg", "jpeg", "png"])
 
-    # Model Settings placeholder
-    st.sidebar.subheader("Model Settings")
-    confidence_threshold = st.sidebar.slider("Detection Confidence", min_value=0.1, max_value=1.0, value=0.5, step=0.05)
+    confidence_threshold = 0.5
 
     if uploaded_file is not None:
         # Load Image
@@ -299,6 +304,13 @@ def main():
                         
                     # 3. & 4. Clot Detection and Lesion Area
                     num_clots, total_lesion_area, lesion_area_str, annotated_image = detect_clots_and_lesion(image, conf_threshold=confidence_threshold)
+                    
+                    # 4.5. Logical Consistency Override!
+                    # If the segmentation model physically finds clots, it MUST be a stroke regardless of the classifier.
+                    if num_clots > 0 and stroke_pred == "Normal":
+                        stroke_pred = "Stroke"
+                        # Run the stroke type classifier since we skipped it earlier
+                        stroke_type = predict_stroke_type(image)
                     
                     # 5. Risk Assessment
                     risk_level = calculate_risk(stroke_pred, stroke_type, num_clots, total_lesion_area)
@@ -357,11 +369,20 @@ def main():
             st.markdown("<div style='height: 15px'></div>", unsafe_allow_html=True)
             
             # Row 3: Risk Level
-            r_color = {"High": "metric-value-high", "Medium": "metric-value-medium", "Low": "metric-value-low"}.get(risk_level, "metric-value-neutral")
+            if "High" in risk_level:
+                r_color = "metric-value-high"
+                border_color = "#ff4b4b"
+            elif "Moderate" in risk_level or "Medium" in risk_level:
+                r_color = "metric-value-medium"
+                border_color = "#ffa421"
+            else:
+                r_color = "metric-value-low"
+                border_color = "#008f51"
+
             st.markdown(f"""
-            <div class="metric-card" style="border: 2px solid {'#ff4b4b' if risk_level=='High' else ('#ffa421' if risk_level=='Medium' else '#008f51')};">
+            <div class="metric-card" style="border: 2px solid {border_color};">
                 <div class="metric-label">Risk Prediction Level</div>
-                <div class="{r_color}" style="font-size: 32px;">{risk_level} RISK</div>
+                <div class="{r_color}" style="font-size: 32px;">{risk_level.upper()}</div>
             </div>
             """, unsafe_allow_html=True)
 
